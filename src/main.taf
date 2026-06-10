@@ -1,0 +1,2 @@
+<taf-app:container:ghcr.io/taffish/flye:2.9.6-r1>
+flye ::*ARGV*::

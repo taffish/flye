@@ -1,0 +1,48 @@
+[package]
+name = "flye"
+kind = "tool"
+version = "2.9.6"
+release = 1
+license = "Apache-2.0"
+main = "src/main.taf"
+
+[repository]
+url = "https://github.com/taffish/flye"
+
+[command]
+name = "taf-flye"
+
+[meta]
+domain = "bio"
+categories = ["genome-assembly", "long-read", "metagenomics", "de-novo-assembly"]
+keywords = ["Flye", "metaFlye", "PacBio", "ONT", "Nanopore", "HiFi", "long reads", "repeat graph", "assembly", "contigs", "GFA"]
+description = "Flye long-read de novo assembler for PacBio and Oxford Nanopore reads, including isolate and metagenome repeat-graph assembly modes."
+
+[runtime]
+pipe = true
+command_mode = true
+
+[container]
+image = "ghcr.io/taffish/flye:2.9.6-r1"
+dockerfile = "docker/Dockerfile"
+build_platforms = "linux/amd64,linux/arm64"
+
+[upstream]
+name = "Flye"
+type = "github"
+repo = "mikolmogorov/Flye"
+homepage = "https://github.com/mikolmogorov/Flye"
+manual = "https://github.com/mikolmogorov/Flye/blob/flye/docs/USAGE.md"
+release_url = "https://github.com/mikolmogorov/Flye/releases/tag/2.9.6"
+downloads = "https://github.com/mikolmogorov/Flye/archive/refs/tags/2.9.6.tar.gz"
+version = "2.9.6"
+license = "BSD-3-Clause"
+citation = "Kolmogorov et al. 2019; Kolmogorov et al. 2020"
+doi = "10.1038/s41587-019-0072-8; 10.1038/s41592-020-00971-x"
+watch = "tags"
+
+[smoke]
+backend = "docker"
+timeout = 600
+exist = ["flye", "flye-modules", "flye-minimap2", "flye-samtools", "python3", "bash", "gzip"]
+test = ["flye --version 2>&1 | grep -Fx '2.9.6-b1802' >/dev/null", "flye --help 2>&1 | grep -F 'Assembly of long reads with repeat graphs' >/dev/null && flye --help 2>&1 | grep -F -- '--pacbio-hifi' >/dev/null && flye --help 2>&1 | grep -F -- '--nano-hq' >/dev/null && flye --help 2>&1 | grep -F -- '--meta' >/dev/null", "python3 -c 'from flye.__version__ import __version__; assert __version__ == \"2.9.6\"' && command -v flye-modules >/dev/null && command -v flye-minimap2 >/dev/null && command -v flye-samtools >/dev/null", "for x in flye-modules flye-minimap2 flye-samtools; do command -v \"$x\" >/dev/null; ! ldd \"$(command -v \"$x\")\" 2>&1 | grep -F 'not found' >/dev/null; done", "tmp=/tmp/taf-flye-toy-$$; rm -rf \"$tmp\"; mkdir -p \"$tmp\"; cd \"$tmp\"; python3 -m flye.tests.test_toy > toy.log 2>&1; grep -F 'TEST SUCCESSFUL' toy.log >/dev/null; rm -rf \"$tmp\""]
