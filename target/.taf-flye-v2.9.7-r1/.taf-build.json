@@ -1,0 +1,6 @@
+{
+  "artifact": "taf-flye-v2.9.7-r1",
+  "schema": "taffish.build/v1",
+  "source_sha256": "c3e1928fd88bd35fe00698eb62f695029d797c316e3924163b1a9cbc1816d5e0",
+  "wrapper_sha256": "50f220f7523acf036504411b64f1364743b3983d2fcb8354e6660e240af6d92c"
+}

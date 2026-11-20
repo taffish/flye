@@ -1,71 +1,63 @@
-taf-flye 2.9.6-r1
+Flye 2.9.7-r1
 
-TAFFISH wrapper for Flye, a de novo assembler for PacBio and Oxford
-Nanopore long reads using repeat graphs. The default in-container command is
-flye.
+Purpose:
+  Assemble PacBio or Oxford Nanopore long reads into contigs and repeat graphs.
 
 Usage:
-  taf-flye [flye options]
-  taf-flye -- [flye options]
-  taf-flye flye [flye options]
-  taf-flye flye-minimap2 [options]
-  taf-flye flye-samtools [options]
-
-Wrapper options:
-  -h, --help       Show this TAFFISH help
-  -v, --version    Show the TAFFISH package version
-  --compile        Print generated shell code instead of running it
-  --               Stop parsing TAFFISH wrapper options
-
-Common upstream Flye examples:
+  taf-flye --pacbio-hifi reads.fastq.gz -o assembly -t 8
+  taf-flye flye --nano-hq reads.fastq.gz -o assembly -t 8
   taf-flye -- --help
+
+Common tasks:
+  taf-flye --nano-hq reads.fastq.gz --meta -o meta_assembly -t 8
+  taf-flye --pacbio-hifi reads.fastq.gz -o assembly -t 8 --resume
+  taf-flye --pacbio-hifi reads.fastq.gz --polish-target draft.fasta -o polished -t 8
   taf-flye -- --version
 
-  taf-flye --pacbio-hifi reads.fastq.gz --genome-size 5m \
-    --threads 8 --out-dir flye-hifi-out
+Required inputs:
+  FASTA/FASTQ long reads, optionally gzip-compressed; select one read type.
+  Read and output paths, including parent directories, must not contain spaces.
+  Use a new writable output directory; keep intermediates for --resume.
 
-  taf-flye --nano-hq ont-q20.fastq.gz --genome-size 5m \
-    --threads 8 --out-dir flye-ont-out
+Common options:
+  --pacbio-raw / --pacbio-corr / --pacbio-hifi  PacBio read type.
+  --nano-raw / --nano-corr / --nano-hq         ONT read type.
+  -o, --out-dir DIR  Output directory (parent must already exist).
+  -t, --threads N    Worker threads; choose for available memory and CPU.
+  -g, --genome-size SIZE  Genome size, for example 5m; required with --asm-coverage.
+  --meta            Uneven-coverage/metagenome mode.
+  --resume          Continue the same run using its output directory and inputs.
+  --stop-after NAME Stop after a named stage; --resume continues it later.
 
-  taf-flye --nano-raw ont-raw.fastq.gz --genome-size 5m \
-    --threads 8 --out-dir flye-raw-out
+Key outputs:
+  assembly/assembly.fasta       Final contigs.
+  assembly/assembly_graph.gfa   Repeat graph for a separate viewer.
+  assembly/assembly_info.txt    Contig statistics.
+  assembly/flye.log, params.json and stage directories support diagnosis/resume.
 
-  taf-flye --nano-hq reads.fastq.gz --meta \
-    --threads 16 --out-dir metaflye-out
+Backend-specific use:
+  Optional read-only input directory outside the working directory:
+  Docker:
+    TAFFISH_CONTAINER_BACKEND=docker TAFFISH_DOCKER_RUN_ARGS="--volume /data/reads:/reads:ro" taf-flye --pacbio-hifi /reads/sample.fastq.gz -o assembly -t 8
+  Podman:
+    TAFFISH_CONTAINER_BACKEND=podman TAFFISH_PODMAN_RUN_ARGS="--volume /data/reads:/reads:ro" taf-flye --pacbio-hifi /reads/sample.fastq.gz -o assembly -t 8
+  Apptainer:
+    TAFFISH_CONTAINER_BACKEND=apptainer TAFFISH_APPTAINER_RUN_ARGS="--bind /data/reads:/reads:ro" taf-flye --pacbio-hifi /reads/sample.fastq.gz -o assembly -t 8
 
-Input modes:
-  --pacbio-raw       PacBio CLR reads, typically below 20% error.
-  --pacbio-corr      PacBio reads corrected by another method.
-  --pacbio-hifi      PacBio HiFi reads, typically below 1% error.
-  --nano-raw         Oxford Nanopore regular reads, older/high-error mode.
-  --nano-corr        Corrected Oxford Nanopore reads.
-  --nano-hq          ONT high-quality reads, such as Guppy5+ SUP or Q20/R10.
-  --meta             Metagenome or uneven-coverage assembly mode.
+Immediate notes:
+  No database download is needed. Reads stay unchanged; output can be large.
+  Do not start a fresh run in an old output directory: it can overwrite results.
+  A completed --resume can rerun the final stage; it is not a no-op guarantee.
+  Use a space-free working directory for relative paths. Quoting does not fix
+  upstream path limitations. Host directories with spaces can be explicitly
+  mounted at space-free paths; see README. Avoid quotes and shell metacharacters.
 
-Outputs:
-  Flye writes all assembly outputs into --out-dir. Typical important files
-  include assembly.fasta, assembly_graph.gfa, assembly_info.txt, flye.log,
-  params.json, and intermediate files used for resume/debugging.
+More help:
+  taf-flye flye --help
+  https://github.com/taffish/flye
 
-Included executables:
-  flye
-  flye-modules
-  flye-minimap2
-  flye-samtools
-
-Notes:
-  - This app packages Flye 2.9.6 from the upstream GitHub tag.
-  - Upstream flye --version reports 2.9.6-b1802 for this release.
-  - The TAFFISH wrapper is intentionally thin and preserves the upstream CLI.
-  - command_mode is enabled: taf-flye flye-minimap2 ... runs bundled helpers
-    inside the same container.
-  - No external database is required.
-  - Large assemblies can be CPU, memory, and disk intensive. Smoke tests only
-    run the upstream toy test and do not represent production resource needs.
-  - Flye produces a collapsed mosaic assembly for diploid genomes by default;
-    use Flye/HapDup guidance if phased haplotypes are required.
-
-Upstream:
-  homepage: https://github.com/mikolmogorov/Flye
-  manual:   https://github.com/mikolmogorov/Flye/blob/flye/docs/USAGE.md
-  release:  https://github.com/mikolmogorov/Flye/releases/tag/2.9.6
+Wrapper options:
+  taf-flye --help       Show this TAFFISH help.
+  taf-flye --version    Show TAFFISH wrapper version.
+  taf-flye --compile    Print the generated wrapper shell.
+  taf-flye -- --help    Show upstream Flye help.

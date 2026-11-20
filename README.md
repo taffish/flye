@@ -1,170 +1,235 @@
-# flye
+# Flye
 
-TAFFISH wrapper for [Flye](https://github.com/mikolmogorov/Flye), a de novo
-assembler for single-molecule long reads using repeat graphs.
+`flye` packages the upstream Flye long-read assembler for TAFFISH.
 
-This app packages Flye `2.9.6` as `taf-flye`. The default in-container command
-is `flye`, and TAFFISH command mode is enabled so bundled helper executables
-such as `flye-minimap2`, `flye-samtools`, and `flye-modules` can also be called
-inside the same runtime environment.
+Package identity:
 
-## Installation
+- name: `flye`
+- command: `taf-flye`
+- kind: `tool`
+- version: `2.9.7-r1`
+- license: Apache-2.0 (TAFFISH packaging); BSD-3-Clause (Flye)
+- upstream: [mikolmogorov/Flye](https://github.com/mikolmogorov/Flye)
+
+## What This App Packages
+
+The official [Flye 2.9.7 release](https://github.com/mikolmogorov/Flye/releases/tag/2.9.7),
+built from source. The default command is `flye`; the wrapper does not replace
+its assembly or polishing algorithms. Upstream identifies this release as a
+performance update without logical changes. This is not a packaging benchmark
+or a promise of bit-identical assemblies: upstream notes inherent nondeterminism.
+
+## Scope
+
+This app supports isolate and metaFlye assembly, upstream polishing, graph output,
+and checkpoint-based restart. It runs without a reference database or an online
+service. It does not include read QC, independent annotation/binning/phasing tools,
+a graph GUI, or a web server.
+
+Flye writes GFA/GV files; [AGB](https://github.com/almiheenko/AGB) and
+[Bandage](https://github.com/rrwick/Bandage) are independent downstream viewers.
+The assembler does not invoke them. Use a separately installed viewer or
+TAFFISH app after assembly; this image does not open ports or supply a browser UI.
+
+## Container Contents
+
+- `flye`: assembly/polishing CLI and Python package, built-in configuration,
+  scoring matrices, and the upstream small test dataset.
+- `flye-modules`, `flye-minimap2`, `flye-samtools`: bundled helpers used by Flye;
+  these are upstream's versions, not replacements for current standalone tools.
+- Python 3.11, Bash, gzip, CA certificates and runtime libraries.
+- Upstream documentation/licenses at `/opt/flye/share/doc/flye`; bundled third-party
+  notices below its `third-party/` directory.
+
+## Usage
+
+Install the version when it is published:
 
 ```sh
-taf install flye
-```
-
-Install the exact release:
-
-```sh
-taf install flye 2.9.6-r1
-```
-
-Before publication to the public index, build locally from this app directory:
-
-```sh
-taf build
-target/taf-flye-v2.9.6-r1 -- --version
-```
-
-## Quick Start
-
-Show TAFFISH package help:
-
-```sh
+taf install flye 2.9.7-r1
 taf-flye --help
-```
-
-Show upstream Flye help and version:
-
-```sh
 taf-flye -- --help
 taf-flye -- --version
 ```
 
-Assemble PacBio HiFi reads:
+PacBio HiFi assembly:
 
 ```sh
-taf-flye --pacbio-hifi reads.fastq.gz --genome-size 5m \
-  --threads 8 --out-dir flye-hifi-out
+taf-flye --pacbio-hifi reads.fastq.gz -o assembly -t 8
 ```
 
-Assemble high-quality ONT reads:
+ONT high-quality assembly, or uneven coverage:
 
 ```sh
-taf-flye --nano-hq reads.fastq.gz --genome-size 5m \
-  --threads 8 --out-dir flye-ont-out
+taf-flye flye --nano-hq reads.fastq.gz -o ont_assembly -t 8
+taf-flye --nano-hq reads.fastq.gz --meta -o meta_assembly -t 8
 ```
 
-Run metaFlye mode for metagenomes or uneven coverage:
+Resume a stopped run, retaining the original inputs and stage directories:
 
 ```sh
-taf-flye --nano-hq reads.fastq.gz --meta \
-  --threads 16 --out-dir metaflye-out
+taf-flye --pacbio-hifi reads.fastq.gz -o assembly -t 8 --resume
 ```
 
-Run a bundled helper directly through command mode:
+Run only the upstream polisher:
 
 ```sh
-taf-flye flye-minimap2 --version
-taf-flye flye-samtools --version
+taf-flye --pacbio-hifi reads.fastq.gz --polish-target draft.fasta -o polished -t 8
 ```
 
-## Input Modes
+## Command Mode
 
-Flye requires one read mode option followed by one or more FASTA/FASTQ files.
-Compressed FASTQ input is supported.
+Non-option-leading commands select an executable in the same image:
+`taf-flye flye --help`, `taf-flye flye-minimap2 --version`, or
+`taf-flye flye-samtools --version`. Wrapper `--help`/`--version` describe the
+TAFFISH package; `-- --help`/`-- --version` reach Flye.
 
-Common modes:
+## Inputs
 
-- `--pacbio-raw`: PacBio CLR reads.
-- `--pacbio-corr`: corrected PacBio reads.
-- `--pacbio-hifi`: PacBio HiFi reads.
-- `--nano-raw`: regular or older high-error ONT reads.
-- `--nano-corr`: corrected ONT reads.
-- `--nano-hq`: high-quality ONT reads such as Guppy5+ SUP, Q20, or R10-style
-  data.
-- `--meta`: metagenome or uneven-coverage assembly mode.
+FASTA/FASTQ reads may be gzip-compressed; multiple files of the same read type are
+allowed. Do not mix read types. Select `--pacbio-raw`, `--pacbio-corr`,
+`--pacbio-hifi`, `--nano-raw`, `--nano-corr`, or `--nano-hq` according to the
+upstream manual and your data. `--meta` changes the coverage model.
 
-Important parameters:
+Flye rejects spaces in the absolute path of a read file, including any parent
+directory. Its internal samtools calls also fail when the output path contains
+spaces. Both are upstream restrictions, not repaired by quoting. Use space-free
+read/output paths and working directory, or explicitly mount a read directory at
+`/reads:ro` as below. A symlink/explicit mount must remain valid and readable
+throughout the run; this app does not search for or download missing input files.
 
-- `--genome-size`: approximate genome size, such as `5m`, `120m`, or `3g`.
-- `--threads`: number of CPU threads.
-- `--out-dir`: output directory. Flye manages resume information inside this
-  directory.
-- `--min-overlap`: minimum overlap, usually left on auto for normal runs.
-- `--iterations`: polishing iterations.
-- `--resume`, `--resume-from`, `--stop-after`: upstream stage control.
+The wrapper joins forwarded arguments into shell text. Use simple filenames
+without quote characters, commas or shell metacharacters; do not pass arbitrary
+untrusted strings. Shell quoting alone does not make a path with spaces safe for
+Flye. The explicit-mount example below handles host directory spaces without
+exposing those spaces to Flye's input/output paths.
 
-## Outputs
+## Output Notes
 
-Flye writes all generated files into `--out-dir`. The most important outputs are:
+`-o DIR` must have an existing writable parent. Main products are
+`assembly.fasta`, `assembly_graph.gfa`/`assembly_graph.gv`, and
+`assembly_info.txt`; `flye.log`, `params.json` and stage directories enable
+diagnosis and restart. GFA edges are not necessarily the same sequences as
+extended final contigs. Standalone polishing writes `polished_1.fasta` and
+associated statistics for one iteration.
 
-- `assembly.fasta`: assembled contigs.
-- `assembly_graph.gfa`: repeat graph in GFA format.
-- `assembly_info.txt`: contig length, coverage, circularity, and graph-path
-  information.
-- `flye.log`: main run log; include this when reporting problems upstream.
-- `params.json`: run parameters and provenance.
-- intermediate directories used for polishing, repeat resolution, resume, and
-  debugging.
+Do not start an unrelated fresh run in an existing output directory: upstream
+can overwrite files. Use `--stop-after assembly` to stop at a checkpoint and
+`--resume` with the same inputs/output to continue. Completed-run resume is not
+transactional idempotency; Flye may rerun its final stage. Missing or damaged
+intermediates can require restarting in a new output directory. Preserve the
+old directory until the new results have been checked.
 
-## Container
+## Resources, Databases, and Platform
 
-The Dockerfile builds Flye from the upstream `2.9.6` GitHub tag:
+Linux amd64 and arm64 CPU images are declared; no GPU is used. Configuration,
+scoring matrices and the upstream test fixture are small, immutable package
+resources tied to Flye 2.9.7. No external database/model/catalog or installer is
+needed; project reads and an optional polish target are explicit user inputs.
+Normal assembly does not download anything. Large examples linked in upstream
+documentation are optional and are not fetched by this image.
 
-```text
-https://github.com/mikolmogorov/Flye/archive/refs/tags/2.9.6.tar.gz
-sha256: f05a3889b1c7aafed4cc0ed1adc1f19c22618c1c7b97ab5f80d388c8192bd32a
+Input directories may be shared read-only between users. Their owner supplies
+them once, with directory traversal and file-read permissions for each user;
+each user runs in a separate writable working/output directory. The wrapper
+does not chmod, chown, register, copy or delete shared inputs. No auto-discovery
+environment variables or silently selected resource versions are added.
+
+## Backend Usage and Capability Matrix
+
+Ordinary assembly uses the same `taf-flye` arguments on all three backends.
+The wrapper encodes the calling UID/GID for Docker and Podman (keep-id user
+namespace); Apptainer uses its normal host-user execution. No manual user flags
+are required. Select a backend with `TAFFISH_CONTAINER_BACKEND`. The only different syntax
+below is an optional explicit read-only directory outside the working directory:
+
+| Capability | Docker | Podman | Apptainer |
+| --- | --- | --- | --- |
+| Shared reads | `--volume /data/reads:/reads:ro` | `--volume /data/reads:/reads:ro` | `--bind /data/reads:/reads:ro` |
+
+```sh
+TAFFISH_CONTAINER_BACKEND=docker TAFFISH_DOCKER_RUN_ARGS="--volume /data/reads:/reads:ro" taf-flye --pacbio-hifi /reads/sample.fastq.gz -o assembly -t 8
+TAFFISH_CONTAINER_BACKEND=podman TAFFISH_PODMAN_RUN_ARGS="--volume /data/reads:/reads:ro" taf-flye --pacbio-hifi /reads/sample.fastq.gz -o assembly -t 8
+TAFFISH_CONTAINER_BACKEND=apptainer TAFFISH_APPTAINER_RUN_ARGS="--bind /data/reads:/reads:ro" taf-flye --pacbio-hifi /reads/sample.fastq.gz -o assembly -t 8
 ```
 
-The image includes the upstream Python package, compiled C++ modules, bundled
-`flye-minimap2`, bundled `flye-samtools`, configuration files, docs, and
-upstream toy test data. No external database is required.
-`flye --version` reports the upstream runtime string `2.9.6-b1802`; the
-packaged upstream release version remains `2.9.6`.
-During container build, the Dockerfile applies a narrow build-only Makefile
-compatibility patch so Linux `aarch64` containers use Flye's existing ARM NEON
-minimap2 build path. No runtime code or scientific defaults are changed.
+Replace `/data/reads` with a directory accessible to the selected container engine.
+Docker/Podman Desktop must share that host path. Shared storage or SIF setup is
+site policy, not an app-intrinsic flag.
 
-Native build platforms are declared as `linux/amd64,linux/arm64`. The app does
-not require GPU runtime flags.
+If the host output directory contains spaces, create it first, mount it at a
+space-free container path and pass that absolute path to Flye. The inner quotes
+below preserve the complete mount specification; they do not change upstream
+filename handling. Read filenames within `/data/reads` must still be space-free.
 
-## Smoke Tests
+```sh
+TAFFISH_CONTAINER_BACKEND=docker TAFFISH_DOCKER_RUN_ARGS="--volume /data/reads:/reads:ro --volume '/data/run with spaces:/results'" taf-flye --pacbio-hifi /reads/sample.fastq.gz -o /results/assembly -t 8
+TAFFISH_CONTAINER_BACKEND=podman TAFFISH_PODMAN_RUN_ARGS="--volume /data/reads:/reads:ro --volume '/data/run with spaces:/results'" taf-flye --pacbio-hifi /reads/sample.fastq.gz -o /results/assembly -t 8
+TAFFISH_CONTAINER_BACKEND=apptainer TAFFISH_APPTAINER_RUN_ARGS="--bind /data/reads:/reads:ro --bind '/data/run with spaces:/results'" taf-flye --pacbio-hifi /reads/sample.fastq.gz -o /results/assembly -t 8
+```
 
-The TAFFISH smoke metadata is self-contained and offline. It checks:
+## Build and Reproducibility
 
-- `flye`, `flye-modules`, `flye-minimap2`, `flye-samtools`, `python3`, `bash`,
-  and `gzip` exist.
-- runtime version is exactly `2.9.6-b1802`;
-- upstream help exposes core PacBio, ONT, and metagenome modes;
-- Python package version imports correctly;
-- bundled native executables have no unresolved shared libraries;
-- upstream `flye.tests.test_toy` completes successfully.
+Official tag `2.9.7`, commit
+`f52d39b967441e4b6572d94878b84505f17edb90`; source tar SHA256:
+`041635b3b7e7afc69fd50ab9cbf040db4749b04ae626ba65c8b08f550642351f`.
+The official display string is `2.9.7-b1802`; build 1802 is unchanged upstream,
+not a TAFFISH fabrication.
 
-The toy test assembles the upstream bundled small E. coli fixture. It proves the
-container can run a real Flye assembly path, but it is not a scientific
-benchmark and does not represent production memory, CPU, or disk requirements.
+The existing one-line Makefile compatibility adjustment recognizes Linux
+`aarch64` alongside `arm64`, selecting Flye's own ARM NEON minimap2 path.
+No runtime Python, algorithm, model or threshold is patched. Debug symbols are
+stripped; runtime helpers, data and licenses are retained.
 
-## Scope and Boundaries
+The Debian 12 base is digest-pinned. Debian/security repositories remain rolling:
+dependency revisions and availability may change, so rebuilds are not guaranteed
+byte-identical. Preserve validated OCI/SIF artifacts/digests; repository changes
+require review and revalidation rather than disabling checksums. Build tools and
+download caches stay outside the final image. The Action is copied unchanged
+from a fresh TAFFISH template; it builds the two native architectures separately.
 
-This TAFFISH app preserves the upstream Flye command-line interface. It does not
-wrap a separate workflow, add read QC, perform post-assembly polishing with
-external tools, annotate contigs, bin metagenomes, phase diploid assemblies, or
-visualize graphs. Those steps should be handled by dedicated tools or flows.
+## Boundaries
 
-Flye can assemble PacBio/ONT long reads and has metagenome mode. It produces
-collapsed mosaic assemblies for diploid genomes by default; users who need
-haplotype-resolved output should follow upstream Flye/HapDup guidance.
+Assembly memory/disk use depends strongly on data size and coverage; choose
+threads conservatively. `--asm-coverage` requires `--genome-size`. The package
+does not claim a speedup, clinical suitability, species-specific accuracy or
+production-dataset equivalence. HapDup/strainy and graph viewers remain separate.
 
-## Upstream
+## Troubleshooting
 
-- Project: Flye
-- Repository: <https://github.com/mikolmogorov/Flye>
-- Manual: <https://github.com/mikolmogorov/Flye/blob/flye/docs/USAGE.md>
-- Release: <https://github.com/mikolmogorov/Flye/releases/tag/2.9.6>
-- License: BSD-3-Clause
-- Main citation for isolate assembly: Kolmogorov et al. 2019,
-  doi:10.1038/s41587-019-0072-8
-- Main citation for metagenome assembly: Kolmogorov et al. 2020,
-  doi:10.1038/s41592-020-00971-x
+- `Path to reads contain spaces`: relocate or explicitly mount reads at a
+  space-free container path; quoting does not remove this upstream check.
+- A samtools path truncated at a space, or an empty intermediate consensus:
+  check the absolute output path and working directory. Preserve the failure log
+  and rerun in a new space-free output path; do not accept partial results.
+- Cannot resume: retain `params.json` and all stage outputs. Use the same input
+  paths; do not delete or overwrite the previous directory to suppress an error.
+- Permission denied: verify shared-file readability and output-parent ownership.
+  Use your ordinary UID; do not make an immutable image or shared input writable.
+- A failed process or exhausted memory: inspect `flye.log`, available RAM/disk
+  and threads; do not treat partial output as a finished assembly.
+- “command not found” in a viewer: AGB/Bandage are independent installations.
+
+## Testing
+
+Build-time gates cover exact version/status, imports, help, helper executables,
+shared libraries and bundled files. Full assembly is intentionally a runtime
+gate, not a heavy ARM64 Dockerfile assertion.
+
+Release verification uses the fixed upstream toy fixture, detached fresh
+containers, no network, read-only-root ordinary users and real generated
+wrappers. It checks output structure rather than nondeterministic assembly
+byte equality. Native platform/backend results, artifact identities, resume,
+shared-input integrity, negative cases, permissions and cleanup are recorded in
+the maintainer release evidence. No production data or external database is
+downloaded for these checks; they are packaging verification, not scientific
+validation.
+
+## License and Citation
+
+TAFFISH packaging: Apache-2.0. Flye: BSD-3-Clause. Bundled components retain their
+own license notices in the image; see `third-party/` under the upstream docs.
+
+- Kolmogorov et al. (2019), [Assembly of long, error-prone reads using repeat graphs](https://doi.org/10.1038/s41587-019-0072-8).
+- Kolmogorov et al. (2020), [metaFlye: scalable long-read metagenome assembly using repeat graphs](https://doi.org/10.1038/s41592-020-00971-x).
+- [Versioned upstream manual](https://github.com/mikolmogorov/Flye/blob/2.9.7/docs/USAGE.md).
